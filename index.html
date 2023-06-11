@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Screen Time Tracker</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background-color: transparent;
+        user-select: none;
+        -webkit-app-region: drag;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body oncontextmenu="showContextMenu(event)">
+    <h1 id="screenTime">00:00:00</h1>
+
+    <script>
+      const { ipcRenderer, remote } = require('electron');
+
+      let screenTime = 0;
+      let lastActiveTime = Date.now();
+      let idleTimeout;
+      let isIdle = false;
+      let idleThreshold = 60 * 1000; // 1 minute
+
+      function updateScreenTime() {
+        const currentActiveTime = Date.now();
+        screenTime += currentActiveTime - lastActiveTime;
+        lastActiveTime = currentActiveTime;
+
+        const timeInSeconds = Math.floor(screenTime / 1000);
+        const hours = Math.floor(timeInSeconds / 3600);
+        const minutes = Math.floor((timeInSeconds % 3600) / 60);
+        const seconds = Math.floor(timeInSeconds % 60);
+        const screenTimeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+        document.getElementById('screenTime').textContent = isIdle ? 'Idle' : screenTimeString;
+      }
+
+      function checkIdleStatus() {
+        clearTimeout(idleTimeout);
+        if (!isIdle) {
+          isIdle = true;
+          document.getElementById('screenTime').textContent = 'Idle';
+          ipcRenderer.send('stopScreenTimeTracking');
+        }
+        idleTimeout = setTimeout(() => {
+          isIdle = false;
+          if (document.hasFocus()) {
+            ipcRenderer.send('startScreenTimeTracking');
+          }
+        }, idleThreshold);
+      }
+
+      function showContextMenu(event) {
+        event.preventDefault();
+        const template = [
+          {
+            label: 'Idle Time Threshold',
+            submenu: [
+              { label: '1 minute', click: () => setIdleThreshold(60) },
+              { label: '5 minutes', click: () => setIdleThreshold(300) },
+              { label: '10 minutes', click: () => setIdleThreshold(600) },
+            ]
+          }
+        ];
+        const menu = new remote.Menu.buildFromTemplate(template);
+        menu.popup({ window: remote.getCurrentWindow() });
+      }
+
+      function setIdleThreshold(seconds) {
+        idleThreshold = seconds * 1000;
+      }
+
+      ipcRenderer.send('startScreenTimeTracking'); // Start screen time tracking
+      setInterval(updateScreenTime, 1000);
+      setInterval(checkIdleStatus, 1000);
+    </script>
+  </body>
+</html>
